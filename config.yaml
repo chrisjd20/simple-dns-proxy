@@ -1,0 +1,6 @@
+records:
+  hws.unreal.local: 172.31.255.80
+  euc.unreal.local: 172.31.255.80
+  hws.euc.unreal.local: 172.31.255.80
+  unreal.local: 172.31.255.135
+fallback_dns: 8.8.8.8
