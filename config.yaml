@@ -4,3 +4,12 @@ records:
   hws.euc.unreal.local: 172.31.255.80
   unreal.local: 172.31.255.135
 fallback_dns: 8.8.8.8
+server:
+  udp:
+    enabled: true
+    port: 53
+    interface: "" # Empty string means all interfaces
+  tcp:
+    enabled: true
+    port: 53
+    interface: "" # Empty string means all interfaces

@@ -12,9 +12,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ServerConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Port      int    `yaml:"port"`
+	Interface string `yaml:"interface"`
+}
+
 type Config struct {
 	Records     map[string]string `yaml:"records"`
 	FallbackDNS string            `yaml:"fallback_dns"`
+	Server      struct {
+		UDP ServerConfig `yaml:"udp"`
+		TCP ServerConfig `yaml:"tcp"`
+	} `yaml:"server"`
 }
 
 var (
@@ -38,9 +48,25 @@ func loadConfig() error {
 	configLock.Lock()
 	defer configLock.Unlock()
 	config = newConfig
+
+	// Apply default values for server if not specified
+	if config.Server.UDP.Port <= 0 {
+		config.Server.UDP.Port = 53
+	}
+	if config.Server.TCP.Port <= 0 {
+		config.Server.TCP.Port = 53
+	}
+
 	log.Println("Configuration loaded/reloaded")
 	log.Printf("Records: %v", config.Records)
 	log.Printf("Fallback DNS: %s", config.FallbackDNS)
+
+	// Log server configuration
+	log.Printf("UDP Server: enabled=%v, port=%d, interface=%q",
+		config.Server.UDP.Enabled, config.Server.UDP.Port, config.Server.UDP.Interface)
+	log.Printf("TCP Server: enabled=%v, port=%d, interface=%q",
+		config.Server.TCP.Enabled, config.Server.TCP.Port, config.Server.TCP.Interface)
+
 	return nil
 }
 
@@ -141,32 +167,75 @@ func main() {
 		log.Fatalf("Failed to load initial config: %v", err)
 	}
 
+	// Apply default settings if not specified in config
+	configLock.Lock()
+	if config.Server.UDP.Port <= 0 {
+		config.Server.UDP.Port = 53
+	}
+	if config.Server.TCP.Port <= 0 {
+		config.Server.TCP.Port = 53
+	}
+	// Default to enabled if not specified
+	if config.Server.UDP.Enabled == false && config.Server.TCP.Enabled == false {
+		// If neither is explicitly enabled/disabled, enable both by default
+		config.Server.UDP.Enabled = true
+		config.Server.TCP.Enabled = true
+	}
+	configLock.Unlock()
+
 	// Watch for config changes in a goroutine
 	go watchConfig()
 
 	// Attach handler function
 	dns.HandleFunc(".", handleDNSRequest)
 
-	// Start DNS server
-	port := 53
+	// Count the number of servers we're starting
+	servers := 0
 
-	// Start UDP server
-	go func() {
-		serverUDP := &dns.Server{Addr: fmt.Sprintf(":%d", port), Net: "udp"}
-		log.Printf("Starting UDP DNS server on port %d", port)
-		err := serverUDP.ListenAndServe()
-		if err != nil {
-			log.Fatalf("Failed to start UDP server: %v", err)
-		}
-		defer serverUDP.Shutdown()
-	}()
+	// Prepare channel for waiting
+	errChan := make(chan error)
 
-	// Start TCP server
-	serverTCP := &dns.Server{Addr: fmt.Sprintf(":%d", port), Net: "tcp"}
-	log.Printf("Starting TCP DNS server on port %d", port)
-	err := serverTCP.ListenAndServe()
-	if err != nil {
-		log.Fatalf("Failed to start TCP server: %v", err)
+	// Start UDP server if enabled
+	configLock.RLock()
+	udpEnabled := config.Server.UDP.Enabled
+	udpPort := config.Server.UDP.Port
+	udpInterface := config.Server.UDP.Interface
+	configLock.RUnlock()
+
+	if udpEnabled {
+		servers++
+		go func() {
+			addr := fmt.Sprintf("%s:%d", udpInterface, udpPort)
+			serverUDP := &dns.Server{Addr: addr, Net: "udp"}
+			log.Printf("Starting UDP DNS server on %s", addr)
+			err := serverUDP.ListenAndServe()
+			errChan <- fmt.Errorf("UDP server stopped: %w", err)
+		}()
 	}
-	defer serverTCP.Shutdown()
+
+	// Start TCP server if enabled
+	configLock.RLock()
+	tcpEnabled := config.Server.TCP.Enabled
+	tcpPort := config.Server.TCP.Port
+	tcpInterface := config.Server.TCP.Interface
+	configLock.RUnlock()
+
+	if tcpEnabled {
+		servers++
+		go func() {
+			addr := fmt.Sprintf("%s:%d", tcpInterface, tcpPort)
+			serverTCP := &dns.Server{Addr: addr, Net: "tcp"}
+			log.Printf("Starting TCP DNS server on %s", addr)
+			err := serverTCP.ListenAndServe()
+			errChan <- fmt.Errorf("TCP server stopped: %w", err)
+		}()
+	}
+
+	if servers == 0 {
+		log.Fatalf("No DNS servers enabled in configuration")
+	}
+
+	// Wait for any server to exit (which is usually an error)
+	err := <-errChan
+	log.Fatalf("Server error: %v", err)
 }
