@@ -148,41 +148,53 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	for _, q := range r.Question {
 		log.Printf("Received query for %s, type %s", q.Name, dns.TypeToString[q.Qtype])
+		// Get the fallback DNS server for potential relaying
+		configLock.RLock()
+		fallbackDNS := config.FallbackDNS
+		configLock.RUnlock()
+
+		// For A records, check if we have a match in our config first
 		if q.Qtype == dns.TypeA {
 			configLock.RLock()
 			ip, exists := config.Records[strings.ToLower(strings.TrimSuffix(q.Name, "."))]
-			fallbackDNS := config.FallbackDNS
 			configLock.RUnlock()
 
 			if exists {
-				log.Printf("Found record for %s -> %s in config", q.Name, ip)
+				log.Printf("Found A record for %s -> %s in config", q.Name, ip)
 				rr, err := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, ip))
 				if err == nil {
 					msg.Answer = append(msg.Answer, rr)
+					continue // Process next question
 				} else {
 					log.Printf("Error creating A record for %s: %v", q.Name, err)
 					msg.Rcode = dns.RcodeServerFailure
-				}
-			} else {
-				log.Printf("No record for %s in config, relaying to %s", q.Name, fallbackDNS)
-				if fallbackDNS == "" {
-					log.Printf("Fallback DNS not configured, returning NXDOMAIN for %s", q.Name)
-					msg.Rcode = dns.RcodeNameError // NXDOMAIN
-				} else {
-					// Relay to fallback DNS
-					c := new(dns.Client)
-					in, _, err := c.Exchange(r, fallbackDNS+":53") // Ensure port is specified
-					if err != nil {
-						log.Printf("Error relaying query for %s to %s: %v", q.Name, fallbackDNS, err)
-						msg.Rcode = dns.RcodeServerFailure
-					} else {
-						msg = in
-					}
+					continue // Process next question
 				}
 			}
+		}
+
+		// If we reach here, either:
+		// 1. It's a non-A record query
+		// 2. It's an A record query but not in our config
+		// In both cases, relay to the fallback DNS if configured
+
+		log.Printf("Relaying %s query for %s to fallback DNS %s",
+			dns.TypeToString[q.Qtype], q.Name, fallbackDNS)
+
+		if fallbackDNS == "" {
+			log.Printf("Fallback DNS not configured, returning NXDOMAIN for %s", q.Name)
+			msg.Rcode = dns.RcodeNameError // NXDOMAIN
 		} else {
-			log.Printf("Unsupported query type %s for %s, returning NotImp", dns.TypeToString[q.Qtype], q.Name)
-			msg.Rcode = dns.RcodeNotImplemented
+			// Relay to fallback DNS
+			c := new(dns.Client)
+			c.Net = w.RemoteAddr().Network()               // Use same protocol (UDP/TCP) as the client
+			in, _, err := c.Exchange(r, fallbackDNS+":53") // Ensure port is specified
+			if err != nil {
+				log.Printf("Error relaying query for %s to %s: %v", q.Name, fallbackDNS, err)
+				msg.Rcode = dns.RcodeServerFailure
+			} else {
+				msg = in
+			}
 		}
 	}
 
