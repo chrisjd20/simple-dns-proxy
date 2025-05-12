@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -28,10 +29,39 @@ type Config struct {
 }
 
 var (
-	config     Config
-	configLock sync.RWMutex
-	configFile = "/app/config/config.yaml" // Path inside the container
+	config            Config
+	configLock        sync.RWMutex
+	configFile        string                      // Will be set in init()
+	defaultConfigPath = "/app/config/config.yaml" // Default path inside the container
 )
+
+// init finds and sets the config file path
+func init() {
+	// Check if the default config path exists
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		configFile = defaultConfigPath
+		log.Printf("Found config file at default path: %s", configFile)
+		return
+	}
+
+	// Check if config file exists in the current working directory
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Printf("Warning: Failed to get current working directory: %v", err)
+	} else {
+		localConfigPath := filepath.Join(pwd, "config.yaml")
+		if _, err := os.Stat(localConfigPath); err == nil {
+			configFile = localConfigPath
+			log.Printf("Found config file in current directory: %s", configFile)
+			return
+		}
+	}
+
+	// If config file is not found, default to the container path
+	// This might fail later, but we'll handle that in loadConfig
+	configFile = defaultConfigPath
+	log.Printf("No config file found, will try to load from: %s", configFile)
+}
 
 func loadConfig() error {
 	data, err := os.ReadFile(configFile)
@@ -81,8 +111,9 @@ func watchConfig() {
 	if err != nil {
 		// Fallback for environments where the exact file path might be a symlink or mount point
 		// Try watching the directory instead.
-		log.Printf("Failed to watch config file directly (%s): %v. Watching directory /app/config/ instead.", configFile, err)
-		err = watcher.Add("/app/config/")
+		configDir := filepath.Dir(configFile)
+		log.Printf("Failed to watch config file directly (%s): %v. Watching directory %s instead.", configFile, err, configDir)
+		err = watcher.Add(configDir)
 		if err != nil {
 			log.Fatalf("Failed to watch config directory: %v", err)
 		}
@@ -176,7 +207,7 @@ func main() {
 		config.Server.TCP.Port = 53
 	}
 	// Default to enabled if not specified
-	if config.Server.UDP.Enabled == false && config.Server.TCP.Enabled == false {
+	if !config.Server.UDP.Enabled && !config.Server.TCP.Enabled {
 		// If neither is explicitly enabled/disabled, enable both by default
 		config.Server.UDP.Enabled = true
 		config.Server.TCP.Enabled = true
