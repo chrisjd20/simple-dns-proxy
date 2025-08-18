@@ -22,6 +22,7 @@ records:
   hws.euc.unreal.local: 172.31.255.80
   unreal.local: 172.31.255.135
 fallback_dns: 8.8.8.8
+fallback_protocol: "udp" # or "tcp", blank means use incoming protocol
 server:
   udp:
     enabled: true
@@ -37,6 +38,7 @@ server:
 
 - `records`: A map of domain names to IP addresses for A records
 - `fallback_dns`: The DNS server to relay queries to when not found in `records`
+- `fallback_protocol`: The protocol to use for relaying queries ("udp", "tcp"). If blank, it uses the incoming protocol.
 - `server`: Server configuration section
   - `udp`: UDP server settings
     - `enabled`: Whether to enable the UDP server (boolean)

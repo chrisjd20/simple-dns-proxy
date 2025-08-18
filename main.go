@@ -22,6 +22,7 @@ type ServerConfig struct {
 type Config struct {
 	Records     map[string]string `yaml:"records"`
 	FallbackDNS string            `yaml:"fallback_dns"`
+	FallbackProtocol string       `yaml:"fallback_protocol"`
 	Server      struct {
 		UDP ServerConfig `yaml:"udp"`
 		TCP ServerConfig `yaml:"tcp"`
@@ -90,6 +91,7 @@ func loadConfig() error {
 	log.Println("Configuration loaded/reloaded")
 	log.Printf("Records: %v", config.Records)
 	log.Printf("Fallback DNS: %s", config.FallbackDNS)
+	log.Printf("Fallback Protocol: %s", config.FallbackProtocol)
 
 	// Log server configuration
 	log.Printf("UDP Server: enabled=%v, port=%d, interface=%q",
@@ -151,6 +153,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		// Get the fallback DNS server for potential relaying
 		configLock.RLock()
 		fallbackDNS := config.FallbackDNS
+		fallbackProto := config.FallbackProtocol
 		configLock.RUnlock()
 
 		// For A records, check if we have a match in our config first
@@ -187,7 +190,11 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		} else {
 			// Relay to fallback DNS
 			c := new(dns.Client)
-			c.Net = w.RemoteAddr().Network()               // Use same protocol (UDP/TCP) as the client
+			if fallbackProto != "" {
+				c.Net = fallbackProto
+			} else {
+				c.Net = w.RemoteAddr().Network() // Use same protocol (UDP/TCP) as the client
+			}
 			in, _, err := c.Exchange(r, fallbackDNS+":53") // Ensure port is specified
 			if err != nil {
 				log.Printf("Error relaying query for %s to %s: %v", q.Name, fallbackDNS, err)
