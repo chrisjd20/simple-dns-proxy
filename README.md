@@ -17,12 +17,12 @@ The DNS proxy is configured via a YAML file (`config.yaml`). Here's a sample con
 
 ```yaml
 records:
-  hws.unreal.local:
+  hws.fakedomain.local:
     ip: 172.31.255.80
     ttl: 3600 # Optional TTL for this specific record
-  euc.unreal.local:
+  euc.fakedomain.local:
     ip: 172.31.255.80
-  unreal.local:
+  fakedomain.local:
     ip: 172.31.255.135
     ttl: 0 # A TTL of 0 is valid and will be respected
   loadbalanced.local:
@@ -138,8 +138,8 @@ The compiled binaries will be available in the `build` directory as:
 You can test the DNS server using tools like `dig` or `nslookup`:
 
 ```
-dig @localhost hws.unreal.local
-nslookup hws.unreal.local localhost
+dig @localhost hws.fakedomain.local
+nslookup hws.fakedomain.local localhost
 ```
 
 ## License
