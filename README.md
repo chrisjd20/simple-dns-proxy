@@ -26,16 +26,16 @@ records:
     ip: 172.31.255.135
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp" # or "tcp", blank means use incoming protocol
-default_ttl: 60 # Default TTL for records without a specific TTL but not for fallback protocol
+default_ttl: 60 # Default TTL for records without a specific TTL
 server:
   udp:
     enabled: true
     port: 53
-    interface: "" # Empty string means all interfaces
+    interfaces: ["0.0.0.0"] # List of IPs to bind to. "0.0.0.0" means all interfaces.
   tcp:
     enabled: true
     port: 53
-    interface: "" # Empty string means all interfaces
+    interfaces: ["0.0.0.0", "127.0.0.1"] # Example of binding to multiple IPs
 ```
 
 ### Configuration Options
@@ -50,11 +50,11 @@ server:
   - `udp`: UDP server settings
     - `enabled`: Whether to enable the UDP server (boolean)
     - `port`: Port number for the UDP server
-    - `interface`: Network interface to bind to (empty for all)
+    - `interfaces`: List of network interfaces to bind to (e.g., ["0.0.0.0", "192.168.1.100"])
   - `tcp`: TCP server settings
     - `enabled`: Whether to enable the TCP server (boolean) 
     - `port`: Port number for the TCP server
-    - `interface`: Network interface to bind to (empty for all)
+    - `interfaces`: List of network interfaces to bind to (e.g., ["0.0.0.0", "127.0.0.1"])
 
 ## Building and Running
 

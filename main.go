@@ -14,9 +14,9 @@ import (
 )
 
 type ServerConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Port      int    `yaml:"port"`
-	Interface string `yaml:"interface"`
+	Enabled    bool     `yaml:"enabled"`
+	Port       int      `yaml:"port"`
+	Interfaces []string `yaml:"interfaces"`
 }
 
 type RecordConfig struct {
@@ -95,8 +95,14 @@ func loadConfig() error {
 	if config.Server.UDP.Port <= 0 {
 		config.Server.UDP.Port = 53
 	}
+	if len(config.Server.UDP.Interfaces) == 0 {
+		config.Server.UDP.Interfaces = []string{"0.0.0.0"}
+	}
 	if config.Server.TCP.Port <= 0 {
 		config.Server.TCP.Port = 53
+	}
+	if len(config.Server.TCP.Interfaces) == 0 {
+		config.Server.TCP.Interfaces = []string{"0.0.0.0"}
 	}
 
 	log.Println("Configuration loaded/reloaded")
@@ -106,10 +112,10 @@ func loadConfig() error {
 	log.Printf("Default TTL: %d", config.DefaultTTL)
 
 	// Log server configuration
-	log.Printf("UDP Server: enabled=%v, port=%d, interface=%q",
-		config.Server.UDP.Enabled, config.Server.UDP.Port, config.Server.UDP.Interface)
-	log.Printf("TCP Server: enabled=%v, port=%d, interface=%q",
-		config.Server.TCP.Enabled, config.Server.TCP.Port, config.Server.TCP.Interface)
+	log.Printf("UDP Server: enabled=%v, port=%d, interfaces=%q",
+		config.Server.UDP.Enabled, config.Server.UDP.Port, config.Server.UDP.Interfaces)
+	log.Printf("TCP Server: enabled=%v, port=%d, interfaces=%q",
+		config.Server.TCP.Enabled, config.Server.TCP.Port, config.Server.TCP.Interfaces)
 
 	return nil
 }
@@ -266,36 +272,40 @@ func main() {
 	configLock.RLock()
 	udpEnabled := config.Server.UDP.Enabled
 	udpPort := config.Server.UDP.Port
-	udpInterface := config.Server.UDP.Interface
+	udpInterfaces := config.Server.UDP.Interfaces
 	configLock.RUnlock()
 
 	if udpEnabled {
-		servers++
-		go func() {
-			addr := fmt.Sprintf("%s:%d", udpInterface, udpPort)
-			serverUDP := &dns.Server{Addr: addr, Net: "udp"}
-			log.Printf("Starting UDP DNS server on %s", addr)
-			err := serverUDP.ListenAndServe()
-			errChan <- fmt.Errorf("UDP server stopped: %w", err)
-		}()
+		for _, iface := range udpInterfaces {
+			servers++
+			go func(iface string) {
+				addr := fmt.Sprintf("%s:%d", iface, udpPort)
+				serverUDP := &dns.Server{Addr: addr, Net: "udp"}
+				log.Printf("Starting UDP DNS server on %s", addr)
+				err := serverUDP.ListenAndServe()
+				errChan <- fmt.Errorf("UDP server on %s stopped: %w", addr, err)
+			}(iface)
+		}
 	}
 
 	// Start TCP server if enabled
 	configLock.RLock()
 	tcpEnabled := config.Server.TCP.Enabled
 	tcpPort := config.Server.TCP.Port
-	tcpInterface := config.Server.TCP.Interface
+	tcpInterfaces := config.Server.TCP.Interfaces
 	configLock.RUnlock()
 
 	if tcpEnabled {
-		servers++
-		go func() {
-			addr := fmt.Sprintf("%s:%d", tcpInterface, tcpPort)
-			serverTCP := &dns.Server{Addr: addr, Net: "tcp"}
-			log.Printf("Starting TCP DNS server on %s", addr)
-			err := serverTCP.ListenAndServe()
-			errChan <- fmt.Errorf("TCP server stopped: %w", err)
-		}()
+		for _, iface := range tcpInterfaces {
+			servers++
+			go func(iface string) {
+				addr := fmt.Sprintf("%s:%d", iface, tcpPort)
+				serverTCP := &dns.Server{Addr: addr, Net: "tcp"}
+				log.Printf("Starting TCP DNS server on %s", addr)
+				err := serverTCP.ListenAndServe()
+				errChan <- fmt.Errorf("TCP server on %s stopped: %w", addr, err)
+			}(iface)
+		}
 	}
 
 	if servers == 0 {
