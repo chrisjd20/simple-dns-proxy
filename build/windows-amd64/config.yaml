@@ -28,6 +28,11 @@ records:
   #   ttl: 10
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp"
+# fallback_proxy:
+#   enabled: true
+#   address: "127.0.0.1:9050"
+#   username: "user"
+#   password: "password"
 default_ttl: 60 # does not pverrode fallback protocol ttl
 server:
   udp:

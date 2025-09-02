@@ -40,7 +40,12 @@ records:
         weight: 1 # Equal weights = 50/50 split
     ttl: 10
 fallback_dns: 8.8.8.8
-fallback_protocol: "udp" # or "tcp", blank means use incoming protocol
+fallback_protocol: "tcp" # "tcp" is required for SOCKS5 proxy
+fallback_proxy:
+  enabled: true
+  address: "127.0.0.1:9050"
+  # username: "user"
+  # password: "password"
 default_ttl: 60 # Default TTL for records without a specific TTL
 server:
   udp:
@@ -64,6 +69,11 @@ server:
 - `fallback_dns`: The DNS server to relay queries to when not found in `records`
 - `fallback_protocol`: The protocol to use for relaying queries ("udp", "tcp"). If blank, it uses the incoming protocol.
 - `default_ttl`: (Optional) The default TTL for records that don't have a specific `ttl` key. Defaults to 3600.
+- `fallback_proxy`: (Optional) Configuration for a SOCKS5 proxy for fallback queries.
+  - `enabled`: Whether to enable the proxy.
+  - `address`: The `host:port` of the SOCKS5 proxy.
+  - `username`: (Optional) Username for proxy authentication.
+  - `password`: (Optional) Password for proxy authentication.
 - `server`: Server configuration section
   - `udp`: UDP server settings
     - `enabled`: Whether to enable the UDP server (boolean)

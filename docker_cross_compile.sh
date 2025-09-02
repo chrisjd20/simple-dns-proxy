@@ -14,7 +14,7 @@ mkdir -p "${BUILD_DIR}"
 # Build the Docker image for compilation
 echo "Building Docker image for compilation..."
 cat > Dockerfile.build << 'EOF'
-FROM golang:1.22-alpine
+FROM golang:1.24-alpine
 
 # Install required tools
 RUN apk add --no-cache git zip tar

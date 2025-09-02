@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/miekg/dns"
+	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,10 +31,18 @@ type RecordConfig struct {
 	TTL          *uint32      `yaml:"ttl,omitempty"`
 }
 
+type FallbackProxyConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Address  string `yaml:"address"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
+
 type Config struct {
 	Records          map[string]RecordConfig `yaml:"records"`
 	FallbackDNS      string                  `yaml:"fallback_dns"`
 	FallbackProtocol string                  `yaml:"fallback_protocol"`
+	FallbackProxy    FallbackProxyConfig     `yaml:"fallback_proxy"`
 	DefaultTTL       uint32                  `yaml:"default_ttl"`
 	Server           struct {
 		UDP ServerConfig `yaml:"udp"`
@@ -122,6 +131,7 @@ func loadConfig() error {
 	log.Printf("Records: %v", config.Records)
 	log.Printf("Fallback DNS: %s", config.FallbackDNS)
 	log.Printf("Fallback Protocol: %s", config.FallbackProtocol)
+	log.Printf("Fallback Proxy: enabled=%v, address=%s", config.FallbackProxy.Enabled, config.FallbackProxy.Address)
 	log.Printf("Default TTL: %d", config.DefaultTTL)
 
 	// Log server configuration
@@ -185,6 +195,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		configLock.RLock()
 		fallbackDNS := config.FallbackDNS
 		fallbackProto := config.FallbackProtocol
+		fallbackProxy := config.FallbackProxy
 		configLock.RUnlock()
 
 		// For A records, check if we have a match in our config first
@@ -260,14 +271,55 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			log.Printf("Fallback DNS not configured, returning NXDOMAIN for %s", q.Name)
 			msg.Rcode = dns.RcodeNameError // NXDOMAIN
 		} else {
-			// Relay to fallback DNS
-			c := new(dns.Client)
-			if fallbackProto != "" {
-				c.Net = fallbackProto
-			} else {
-				c.Net = w.RemoteAddr().Network() // Use same protocol (UDP/TCP) as the client
+			netProto := fallbackProto
+			if netProto == "" {
+				netProto = w.RemoteAddr().Network()
 			}
-			in, _, err := c.Exchange(r, fallbackDNS+":53") // Ensure port is specified
+
+			var in *dns.Msg
+			var err error
+
+			if fallbackProxy.Enabled && fallbackProxy.Address != "" {
+				if netProto == "udp" {
+					log.Printf("Warning: SOCKS5 proxy is enabled but fallback protocol is UDP. Proxying UDP is not supported. Bypassing proxy for %s", q.Name)
+					c := new(dns.Client)
+					c.Net = netProto
+					in, _, err = c.Exchange(r, fallbackDNS+":53")
+				} else {
+					log.Printf("Using SOCKS5 proxy %s for fallback query for %s", fallbackProxy.Address, q.Name)
+					var auth *proxy.Auth
+					if fallbackProxy.Username != "" {
+						auth = &proxy.Auth{
+							User:     fallbackProxy.Username,
+							Password: fallbackProxy.Password,
+						}
+					}
+					dialer, errDial := proxy.SOCKS5("tcp", fallbackProxy.Address, auth, proxy.Direct)
+					if errDial != nil {
+						err = fmt.Errorf("failed to create SOCKS5 dialer: %w", errDial)
+					} else {
+						conn, errDialConn := dialer.Dial(netProto, fallbackDNS+":53")
+						if errDialConn != nil {
+							err = fmt.Errorf("failed to dial via SOCKS5 proxy: %w", errDialConn)
+						} else {
+							co := &dns.Conn{Conn: conn}
+							errWrite := co.WriteMsg(r)
+							if errWrite != nil {
+								err = fmt.Errorf("failed to write message via proxy: %w", errWrite)
+							} else {
+								in, err = co.ReadMsg()
+							}
+							co.Close()
+						}
+					}
+				}
+			} else {
+				// Relay to fallback DNS without proxy
+				c := new(dns.Client)
+				c.Net = netProto
+				in, _, err = c.Exchange(r, fallbackDNS+":53")
+			}
+
 			if err != nil {
 				log.Printf("Error relaying query for %s to %s: %v", q.Name, fallbackDNS, err)
 				msg.Rcode = dns.RcodeServerFailure
