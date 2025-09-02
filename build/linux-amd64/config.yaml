@@ -8,6 +8,7 @@ records:
     ip: 172.31.255.80
   unreal.local:
     ip: 172.31.255.135
+    ttl: 0 # TTL of 0 prevents caching and is respected. Default TTL is only used if 'ttl' key is omitted.
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp"
 default_ttl: 60 # does not pverrode fallback protocol ttl

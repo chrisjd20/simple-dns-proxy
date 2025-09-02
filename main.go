@@ -20,8 +20,8 @@ type ServerConfig struct {
 }
 
 type RecordConfig struct {
-	IP  string `yaml:"ip"`
-	TTL uint32 `yaml:"ttl,omitempty"`
+	IP  string  `yaml:"ip"`
+	TTL *uint32 `yaml:"ttl,omitempty"`
 }
 
 type Config struct {
@@ -182,10 +182,13 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			configLock.RUnlock()
 
 			if exists {
-				ttl := record.TTL
-				if ttl == 0 {
+				var ttl uint32
+				if record.TTL != nil {
+					ttl = *record.TTL
+				} else {
 					ttl = defaultTTL
 				}
+
 				log.Printf("Found A record for %s -> %s with TTL %d", q.Name, record.IP, ttl)
 				rr, err := dns.NewRR(fmt.Sprintf("%s %d IN A %s", q.Name, ttl, record.IP))
 				if err == nil {

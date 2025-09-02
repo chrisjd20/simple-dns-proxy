@@ -24,6 +24,7 @@ records:
     ip: 172.31.255.80
   unreal.local:
     ip: 172.31.255.135
+    ttl: 0 # A TTL of 0 is valid and will be respected
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp" # or "tcp", blank means use incoming protocol
 default_ttl: 60 # Default TTL for records without a specific TTL
@@ -42,10 +43,10 @@ server:
 
 - `records`: A map of domain names to record configurations.
   - `ip`: The IP address for the A record.
-  - `ttl`: (Optional) The TTL for this specific record in seconds.
+  - `ttl`: (Optional) The TTL for this specific record in seconds. A value of 0 is valid. If omitted, `default_ttl` will be used.
 - `fallback_dns`: The DNS server to relay queries to when not found in `records`
 - `fallback_protocol`: The protocol to use for relaying queries ("udp", "tcp"). If blank, it uses the incoming protocol.
-- `default_ttl`: (Optional) The default TTL for records that don't have a specific TTL. Defaults to 3600.
+- `default_ttl`: (Optional) The default TTL for records that don't have a specific `ttl` key. Defaults to 3600.
 - `server`: Server configuration section
   - `udp`: UDP server settings
     - `enabled`: Whether to enable the UDP server (boolean)
