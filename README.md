@@ -46,7 +46,7 @@ fallback_proxy:
   address: "127.0.0.1:9050"
   # username: "user"
   # password: "password"
-default_ttl: 60 # Default TTL for records without a specific TTL
+default_ttl: 60 # Default TTL for records without a specific TTL and does not overrode fallback protocol ttl
 server:
   udp:
     enabled: true

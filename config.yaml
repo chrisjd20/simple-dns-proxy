@@ -33,7 +33,7 @@ fallback_protocol: "udp"
 #   address: "127.0.0.1:9050"
 #   username: "user"
 #   password: "password"
-default_ttl: 60 # does not pverrode fallback protocol ttl
+default_ttl: 60 # does not overrode fallback protocol ttl
 server:
   udp:
     enabled: true
