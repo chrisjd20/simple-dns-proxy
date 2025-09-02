@@ -1,10 +1,11 @@
 Simple DNS Proxy
 
-This is a standalone DNS proxy that handles A records based on entries in config.yaml
-and relays other queries to a fallback DNS.
+USAGE:
+  1. Edit config.yaml to match your DNS settings
+  2. Run the application with administrator/root privileges
+     (required for binding to port 53, which is privileged)
 
-Usage:
-1. Edit config.yaml to configure your DNS records and server settings
-2. Run the executable: ./simple-dns-proxy
+Configuration:
+  See config.yaml for all available options
 
-The DNS proxy will start and handle DNS queries according to your configuration.
+For more information, visit the project repository.

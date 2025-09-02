@@ -1,9 +1,16 @@
 records:
-  hws.unreal.local: 172.31.255.80
-  euc.unreal.local: 172.31.255.80
-  hws.euc.unreal.local: 172.31.255.80
-  unreal.local: 172.31.255.135
+  hws.unreal.local:
+    ip: 172.31.255.80
+    ttl: 3600
+  euc.unreal.local:
+    ip: 172.31.255.80
+  hws.euc.unreal.local:
+    ip: 172.31.255.80
+  unreal.local:
+    ip: 172.31.255.135
 fallback_dns: 8.8.8.8
+fallback_protocol: "udp"
+default_ttl: 60 # does not pverrode fallback protocol ttl
 server:
   udp:
     enabled: true

@@ -19,11 +19,17 @@ type ServerConfig struct {
 	Interface string `yaml:"interface"`
 }
 
+type RecordConfig struct {
+	IP  string `yaml:"ip"`
+	TTL uint32 `yaml:"ttl,omitempty"`
+}
+
 type Config struct {
-	Records     map[string]string `yaml:"records"`
-	FallbackDNS string            `yaml:"fallback_dns"`
-	FallbackProtocol string       `yaml:"fallback_protocol"`
-	Server      struct {
+	Records          map[string]RecordConfig `yaml:"records"`
+	FallbackDNS      string                  `yaml:"fallback_dns"`
+	FallbackProtocol string                  `yaml:"fallback_protocol"`
+	DefaultTTL       uint32                  `yaml:"default_ttl"`
+	Server           struct {
 		UDP ServerConfig `yaml:"udp"`
 		TCP ServerConfig `yaml:"tcp"`
 	} `yaml:"server"`
@@ -80,6 +86,11 @@ func loadConfig() error {
 	defer configLock.Unlock()
 	config = newConfig
 
+	// Apply default values
+	if config.DefaultTTL <= 0 {
+		config.DefaultTTL = 3600 // Default to 1 hour
+	}
+
 	// Apply default values for server if not specified
 	if config.Server.UDP.Port <= 0 {
 		config.Server.UDP.Port = 53
@@ -92,6 +103,7 @@ func loadConfig() error {
 	log.Printf("Records: %v", config.Records)
 	log.Printf("Fallback DNS: %s", config.FallbackDNS)
 	log.Printf("Fallback Protocol: %s", config.FallbackProtocol)
+	log.Printf("Default TTL: %d", config.DefaultTTL)
 
 	// Log server configuration
 	log.Printf("UDP Server: enabled=%v, port=%d, interface=%q",
@@ -159,12 +171,17 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 		// For A records, check if we have a match in our config first
 		if q.Qtype == dns.TypeA {
 			configLock.RLock()
-			ip, exists := config.Records[strings.ToLower(strings.TrimSuffix(q.Name, "."))]
+			record, exists := config.Records[strings.ToLower(strings.TrimSuffix(q.Name, "."))]
+			defaultTTL := config.DefaultTTL
 			configLock.RUnlock()
 
 			if exists {
-				log.Printf("Found A record for %s -> %s in config", q.Name, ip)
-				rr, err := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, ip))
+				ttl := record.TTL
+				if ttl == 0 {
+					ttl = defaultTTL
+				}
+				log.Printf("Found A record for %s -> %s with TTL %d", q.Name, record.IP, ttl)
+				rr, err := dns.NewRR(fmt.Sprintf("%s %d IN A %s", q.Name, ttl, record.IP))
 				if err == nil {
 					msg.Answer = append(msg.Answer, rr)
 					continue // Process next question
