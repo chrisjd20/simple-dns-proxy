@@ -19,9 +19,15 @@ type ServerConfig struct {
 	Interfaces []string `yaml:"interfaces"`
 }
 
+type WeightedIP struct {
+	IP     string `yaml:"ip"`
+	Weight int    `yaml:"weight"`
+}
+
 type RecordConfig struct {
-	IP  string  `yaml:"ip"`
-	TTL *uint32 `yaml:"ttl,omitempty"`
+	IP           string       `yaml:"ip,omitempty"`
+	AlternateIPs []WeightedIP `yaml:"alternate_ips,omitempty"`
+	TTL          *uint32      `yaml:"ttl,omitempty"`
 }
 
 type Config struct {
@@ -36,10 +42,12 @@ type Config struct {
 }
 
 var (
-	config            Config
-	configLock        sync.RWMutex
-	configFile        string                      // Will be set in init()
-	defaultConfigPath = "/app/config/config.yaml" // Default path inside the container
+	config             Config
+	configLock         sync.RWMutex
+	configFile         string                      // Will be set in init()
+	defaultConfigPath  = "/app/config/config.yaml" // Default path inside the container
+	recordCounters     map[string]int
+	recordCountersLock sync.Mutex
 )
 
 // init finds and sets the config file path
@@ -81,6 +89,11 @@ func loadConfig() error {
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
+
+	// Reset counters on successful reload
+	recordCountersLock.Lock()
+	recordCounters = make(map[string]int)
+	recordCountersLock.Unlock()
 
 	configLock.Lock()
 	defer configLock.Unlock()
@@ -182,6 +195,39 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			configLock.RUnlock()
 
 			if exists {
+				var ip string
+				// Weighted round-robin logic
+				if len(record.AlternateIPs) > 0 {
+					totalWeight := 0
+					for _, wip := range record.AlternateIPs {
+						totalWeight += wip.Weight
+					}
+
+					if totalWeight > 0 {
+						recordCountersLock.Lock()
+						counter := recordCounters[q.Name]
+						recordCounters[q.Name]++
+						recordCountersLock.Unlock()
+
+						currentCountInCycle := counter % totalWeight
+						runningWeight := 0
+						for _, wip := range record.AlternateIPs {
+							runningWeight += wip.Weight
+							if currentCountInCycle < runningWeight {
+								ip = wip.IP
+								break
+							}
+						}
+					}
+				} else {
+					ip = record.IP
+				}
+
+				if ip == "" {
+					log.Printf("No IP found for %s, either misconfigured or single IP not set.", q.Name)
+					continue
+				}
+
 				var ttl uint32
 				if record.TTL != nil {
 					ttl = *record.TTL
@@ -189,8 +235,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 					ttl = defaultTTL
 				}
 
-				log.Printf("Found A record for %s -> %s with TTL %d", q.Name, record.IP, ttl)
-				rr, err := dns.NewRR(fmt.Sprintf("%s %d IN A %s", q.Name, ttl, record.IP))
+				log.Printf("Found A record for %s -> %s with TTL %d", q.Name, ip, ttl)
+				rr, err := dns.NewRR(fmt.Sprintf("%s %d IN A %s", q.Name, ttl, ip))
 				if err == nil {
 					msg.Answer = append(msg.Answer, rr)
 					continue // Process next question
@@ -238,6 +284,8 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func main() {
+	recordCounters = make(map[string]int)
+
 	// Initial load
 	if err := loadConfig(); err != nil {
 		log.Fatalf("Failed to load initial config: %v", err)

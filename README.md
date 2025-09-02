@@ -25,6 +25,20 @@ records:
   unreal.local:
     ip: 172.31.255.135
     ttl: 0 # A TTL of 0 is valid and will be respected
+  loadbalanced.local:
+    alternate_ips:
+      - ip: 10.0.0.1
+        weight: 2
+      - ip: 10.0.0.2
+        weight: 1 # This IP will be served 1/3 of the time
+    ttl: 10
+  split.local:
+    alternate_ips:
+      - ip: 10.0.0.3
+        weight: 1
+      - ip: 10.0.0.4
+        weight: 1 # Equal weights = 50/50 split
+    ttl: 10
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp" # or "tcp", blank means use incoming protocol
 default_ttl: 60 # Default TTL for records without a specific TTL
@@ -41,8 +55,11 @@ server:
 
 ### Configuration Options
 
-- `records`: A map of domain names to record configurations.
-  - `ip`: The IP address for the A record.
+- `records`: A map of domain names to record configurations. Each record can have either `ip` or `alternate_ips`.
+  - `ip`: (Optional) The static IP address for the A record.
+  - `alternate_ips`: (Optional) A list of IPs for weighted round-robin.
+    - `ip`: The IP address.
+    - `weight`: How often this IP is served relative to others.
   - `ttl`: (Optional) The TTL for this specific record in seconds. A value of 0 is valid. If omitted, `default_ttl` will be used.
 - `fallback_dns`: The DNS server to relay queries to when not found in `records`
 - `fallback_protocol`: The protocol to use for relaying queries ("udp", "tcp"). If blank, it uses the incoming protocol.

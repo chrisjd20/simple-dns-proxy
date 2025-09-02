@@ -9,6 +9,23 @@ records:
   unreal.local:
     ip: 172.31.255.135
     ttl: 0 # TTL of 0 prevents caching and is respected. Default TTL is only used if 'ttl' key is omitted.
+  # Example of a weighted round-robin record
+  # loadbalanced.local:
+  #   alternate_ips:
+  #     - ip: 10.0.0.1
+  #       weight: 2
+  #     - ip: 10.0.0.2
+  #       weight: 1 # This IP will be served 1/3 of the time
+  #   ttl: 10
+  #
+  # Example of a 50/50 split between two IPs
+  # split.local:
+  #   alternate_ips:
+  #     - ip: 10.0.0.3
+  #       weight: 1
+  #     - ip: 10.0.0.4
+  #       weight: 1
+  #   ttl: 10
 fallback_dns: 8.8.8.8
 fallback_protocol: "udp"
 default_ttl: 60 # does not pverrode fallback protocol ttl
